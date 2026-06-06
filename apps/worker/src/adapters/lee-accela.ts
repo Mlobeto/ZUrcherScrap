@@ -1,0 +1,226 @@
+import { chromium, type Page } from 'playwright';
+import {
+  classifyServiceZone,
+  detectRequiresSeptic,
+  isPermitOfficeAddress,
+  parseLocationFromText,
+  type ServiceZone,
+} from '../lib/service-area.js';
+
+const BASE_URL = 'https://aca-prod.accela.com';
+const SEARCH_URL = `${BASE_URL}/LEECO/Cap/CapHome.aspx?module=Permitting`;
+const PERMIT_TYPE_VALUE = 'Permitting/Residential/New Primary Structure/NA';
+
+export interface PermitListItem {
+  permitNumber: string;
+  detailUrl: string;
+}
+
+export interface PermitDetail {
+  permitNumber: string;
+  permitType: string;
+  recordStatus: string | null;
+  address: string | null;
+  city: string | null;
+  state: string;
+  ownerName: string | null;
+  builderName: string | null;
+  contractorName: string | null;
+  phone: string | null;
+  email: string | null;
+  estimatedValue: number | null;
+  typeOfUse: string | null;
+  projectDescription: string | null;
+  requiresSeptic: boolean;
+  serviceZone: ServiceZone;
+  sourceUrl: string;
+  rawData: Record<string, unknown>;
+}
+
+function formatDate(d: Date): string {
+  return `${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}/${d.getFullYear()}`;
+}
+
+async function searchPermits(page: Page, lookbackDays: number): Promise<PermitListItem[]> {
+  await page.goto(SEARCH_URL, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForSelector('#ctl00_PlaceHolderMain_generalSearchForm_ddlGSPermitType', { timeout: 30000 });
+
+  const end = new Date();
+  const start = new Date();
+  start.setDate(end.getDate() - lookbackDays);
+
+  await page.selectOption('#ctl00_PlaceHolderMain_generalSearchForm_ddlGSPermitType', PERMIT_TYPE_VALUE);
+  await page.fill('#ctl00_PlaceHolderMain_generalSearchForm_txtGSStartDate', formatDate(start));
+  await page.fill('#ctl00_PlaceHolderMain_generalSearchForm_txtGSEndDate', formatDate(end));
+
+  await Promise.all([
+    page.waitForLoadState('networkidle', { timeout: 90000 }).catch(() => {}),
+    page.click('#ctl00_PlaceHolderMain_btnNewSearch'),
+  ]);
+
+  await page.waitForTimeout(4000);
+
+  const links = await page.locator('a[href*="CapDetail.aspx"]').evaluateAll((els) => {
+    const seen = new Set<string>();
+    const results: { permitNumber: string; detailUrl: string }[] = [];
+
+    for (const el of els) {
+      const text = el.textContent?.trim() ?? '';
+      const href = el.getAttribute('href');
+      if (!href || !/^RES\d{4}-\d+/i.test(text) || seen.has(text)) continue;
+      seen.add(text);
+      results.push({
+        permitNumber: text,
+        detailUrl: href.startsWith('http') ? href : `https://aca-prod.accela.com${href}`,
+      });
+    }
+
+    return results;
+  });
+
+  return links;
+}
+
+async function fetchPermitDetail(page: Page, item: PermitListItem): Promise<PermitDetail> {
+  await page.goto(item.detailUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.waitForTimeout(2000);
+
+  const parsed = await page.evaluate(() => {
+    const text = document.body.innerText;
+    const pick = (pattern: RegExp) => {
+      const match = text.match(pattern);
+      return match?.[1]?.trim() ?? null;
+    };
+
+    const businessNames = [...document.querySelectorAll('.contactinfo_businessname')]
+      .map((el) => el.textContent?.trim())
+      .filter(Boolean) as string[];
+
+    const phones = [...new Set(
+      [...document.querySelectorAll('.ACA_PhoneNumberLTR')]
+        .map((el) => el.textContent?.trim())
+        .filter(Boolean) as string[]
+    )];
+
+    const emails = [...new Set(
+      [...document.querySelectorAll('.contactinfo_email a, .contactinfo_email')]
+        .map((el) => el.textContent?.replace(/^E-mail:\s*/i, '').trim())
+        .filter((e) => e && e.includes('@')) as string[]
+    )];
+
+    const workLocationEl = document.querySelector('.fontbold');
+    const workLocation = workLocationEl?.textContent?.trim() ?? null;
+
+    const licensedBlock = text.match(/Licensed Professional:[\s\S]*?(?=Project Description:|$)/i)?.[0] ?? '';
+    const contractorLine = licensedBlock
+      .split('\n')
+      .map((l) => l.trim())
+      .filter((l) => l && !/Licensed Professional|Primary Phone|Certified|Contractor/i.test(l))[0] ?? null;
+
+    const ownerSection = text.match(/Owner[\s\S]{0,300}/i)?.[0] ?? null;
+    const conditionsBlock = text.match(/Conditions[\s\S]*?(?=Work Location|Licensed Professional|$)/i)?.[0] ?? '';
+
+    return {
+      recordStatus: pick(/Record Status:\s*([^\n]+)/i),
+      permitType: text.includes('Residential New Primary Structure') ? 'Residential New Primary Structure' : 'Unknown',
+      workLocation,
+      builderName: businessNames[0] ?? contractorLine,
+      contractorName: contractorLine,
+      ownerName: ownerSection,
+      phones,
+      emails,
+      estConstValue: pick(/Est\.\s*Const\.\s*Value:\s*([^\n]+)/i),
+      typeOfUse: pick(/Type of Use:\s*([^\n]+)/i),
+      projectDescription: pick(/Project Description:\s*\n?([\s\S]{0,300})/i),
+      fullPageText: text,
+      conditionsBlock,
+    };
+  });
+
+  const requiresSeptic = detectRequiresSeptic(`${parsed.conditionsBlock} ${parsed.fullPageText}`);
+
+  let city: string | null = null;
+  let state = 'FL';
+  let address: string | null = parsed.workLocation;
+
+  const fromProject = parseLocationFromText(parsed.projectDescription);
+  const fromWork = parseLocationFromText(parsed.workLocation);
+
+  if (fromProject.address && !isPermitOfficeAddress(fromProject.address)) {
+    address = fromProject.address;
+    city = fromProject.city;
+  } else if (fromWork.address && !isPermitOfficeAddress(fromWork.address)) {
+    address = fromWork.address;
+    city = fromWork.city;
+  } else if (parsed.workLocation && !isPermitOfficeAddress(parsed.workLocation)) {
+    const cityMatch = parsed.workLocation.match(/([A-Z\s]+)\s+FL\s*\d{5}/i);
+    if (cityMatch) city = cityMatch[1].trim();
+    const addrMatch = parsed.workLocation.match(/^(.+?)\s+[A-Z\s]+\s+FL/i);
+    if (addrMatch) address = addrMatch[1].trim();
+  } else if (fromProject.address) {
+    address = fromProject.address;
+    city = fromProject.city;
+  }
+
+  const serviceZone = classifyServiceZone(city, address, 'lee');
+
+  const estimatedValue = parsed.estConstValue
+    ? Number(parsed.estConstValue.replace(/[^0-9.]/g, '')) || null
+    : null;
+
+  return {
+    permitNumber: item.permitNumber,
+    permitType: parsed.permitType,
+    recordStatus: parsed.recordStatus,
+    address,
+    city,
+    state,
+    ownerName: parsed.ownerName,
+    builderName: parsed.builderName,
+    contractorName: parsed.contractorName,
+    phone: parsed.phones[0] ?? null,
+    email: parsed.emails[0] ?? null,
+    estimatedValue: Number.isFinite(estimatedValue) ? estimatedValue : null,
+    typeOfUse: parsed.typeOfUse,
+    projectDescription: parsed.projectDescription,
+    requiresSeptic,
+    serviceZone,
+    sourceUrl: item.detailUrl,
+    rawData: {
+      ...parsed,
+      requiresSeptic,
+      serviceZone,
+    },
+  };
+}
+
+export async function scrapeLeeAccelaPermits(lookbackDays: number): Promise<PermitDetail[]> {
+  const browser = await chromium.launch({ headless: true });
+  const context = await browser.newContext({
+    userAgent:
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+  });
+  const page = await context.newPage();
+
+  try {
+    const list = await searchPermits(page, lookbackDays);
+    console.log(`Found ${list.length} permits to process`);
+
+    const details: PermitDetail[] = [];
+    for (const item of list) {
+      try {
+        const detail = await fetchPermitDetail(page, item);
+        details.push(detail);
+        const zoneTag = detail.serviceZone === 'lehigh_core' ? ' [LEHIGH]' : '';
+        const septicTag = detail.requiresSeptic ? ' [SEPTIC]' : '';
+        console.log(`  ✓ ${detail.permitNumber} — ${detail.builderName ?? 'no builder'}${zoneTag}${septicTag}`);
+      } catch (err) {
+        console.error(`  ✗ ${item.permitNumber}:`, err instanceof Error ? err.message : err);
+      }
+    }
+
+    return details;
+  } finally {
+    await browser.close();
+  }
+}

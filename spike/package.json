@@ -1,0 +1,13 @@
+{
+  "name": "scrapzurcher-spike",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "spike:accela": "node accela-spike.mjs",
+    "spike:landmark": "node landmark-spike.mjs",
+    "spike:all": "node accela-spike.mjs && node landmark-spike.mjs"
+  },
+  "dependencies": {
+    "playwright": "^1.60.0"
+  }
+}

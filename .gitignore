@@ -1,0 +1,48 @@
+# Dependencies
+node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# IDE (local only)
+.idea/
+*.swp
+*.swo
+
+# Playwright
+test-results/
+playwright-report/
+blob-report/
+playwright/.cache/
+
+# Vite
+apps/web/dist/
+
+# Test / coverage
+coverage/
+
+# Spike (scripts de prueba Fase 0 — resultados generados)
+spike/node_modules/
+spike/results/
+
+# Temp
+tmp/
+temp/
+*.tmp

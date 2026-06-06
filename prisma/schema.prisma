@@ -1,0 +1,110 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum OpportunityStatus {
+  new
+  reviewed
+  dismissed
+}
+
+enum ScrapeRunStatus {
+  running
+  completed
+  failed
+}
+
+enum ServiceZone {
+  lehigh_core
+  service_area
+  out_of_area
+  unknown
+}
+
+model ScrapeRun {
+  id           String          @id @default(cuid())
+  county       String
+  sourceType   String
+  status       ScrapeRunStatus @default(running)
+  startedAt    DateTime        @default(now())
+  finishedAt   DateTime?
+  recordsFound Int             @default(0)
+  error        String?
+  rawRecords   RawRecord[]
+}
+
+model RawRecord {
+  id          String    @id @default(cuid())
+  scrapeRunId String
+  externalId  String
+  payload     Json
+  contentHash String
+  fetchedAt   DateTime  @default(now())
+  scrapeRun   ScrapeRun @relation(fields: [scrapeRunId], references: [id], onDelete: Cascade)
+
+  @@index([externalId])
+}
+
+model Permit {
+  id              String        @id @default(cuid())
+  county          String
+  sourceType      String
+  permitNumber    String
+  permitType      String
+  address         String?
+  city            String?
+  state           String        @default("FL")
+  ownerName       String?
+  builderName     String?
+  contractorName  String?
+  permitDate      DateTime?
+  estimatedValue  Float?
+  recordStatus    String?
+  requiresSeptic  Boolean       @default(false)
+  serviceZone     ServiceZone   @default(unknown)
+  sourceUrl       String
+  rawData         Json?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  opportunities   Opportunity[]
+
+  @@unique([county, permitNumber])
+  @@index([county, permitDate])
+  @@index([serviceZone])
+  @@index([requiresSeptic])
+}
+
+model Builder {
+  id               String        @id @default(cuid())
+  name             String
+  normalizedKey    String        @unique
+  website          String?
+  phone            String?
+  email            String?
+  address          String?
+  projectsDetected Int           @default(0)
+  lastCheckedAt    DateTime?
+  createdAt        DateTime      @default(now())
+  updatedAt        DateTime      @updatedAt
+  opportunities    Opportunity[]
+}
+
+model Opportunity {
+  id        String            @id @default(cuid())
+  permitId  String
+  builderId String?
+  score     Int               @default(0)
+  status    OpportunityStatus @default(new)
+  createdAt DateTime          @default(now())
+  updatedAt DateTime          @updatedAt
+  permit    Permit            @relation(fields: [permitId], references: [id], onDelete: Cascade)
+  builder   Builder?          @relation(fields: [builderId], references: [id])
+
+  @@unique([permitId])
+  @@index([score, status])
+}
