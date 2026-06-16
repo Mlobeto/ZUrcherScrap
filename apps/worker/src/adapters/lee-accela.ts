@@ -66,6 +66,15 @@ async function searchPermits(page: Page, lookbackDays: number): Promise<PermitLi
   ]);
   await page.waitForTimeout(1500);
 
+  // Debug: log page state after search
+  console.log(`[debug] URL after search: ${page.url()}`);
+  console.log(`[debug] Page title: ${await page.title()}`);
+  const allLinks = await page.locator('a').count();
+  const capLinks = await page.locator('a[href*="CapDetail.aspx"]').count();
+  console.log(`[debug] Total <a> on page: ${allLinks} — CapDetail links: ${capLinks}`);
+  const bodyText = await page.locator('body').innerText().catch(() => '(error reading body)');
+  console.log(`[debug] Body snippet: ${bodyText.slice(0, 500)}`);
+
   const links = await page.locator('a[href*="CapDetail.aspx"]').evaluateAll((els) => {
     const seen = new Set<string>();
     const results: { permitNumber: string; detailUrl: string }[] = [];
