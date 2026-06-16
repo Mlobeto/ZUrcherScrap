@@ -110,13 +110,9 @@ export default function App() {
             <h1 className="text-xl font-semibold">Zurcher — Detector de Obras</h1>
             <p className="text-sm text-slate-500">Lehigh Acres + 200 km · Nuevas construcciones · Sépticos</p>
           </div>
-          <button
-            onClick={handleScrape}
-            disabled={scraping || scrapeRunning}
-            className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
-          >
-            {scraping ? 'Iniciando...' : scrapeRunning ? 'Buscando permisos...' : 'Ejecutar scrape'}
-          </button>
+          {scrapeRunning && (
+            <span className="text-sm text-blue-600 font-medium animate-pulse">Actualizando datos...</span>
+          )}
         </div>
       </header>
 
