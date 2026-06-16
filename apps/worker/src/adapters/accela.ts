@@ -24,13 +24,12 @@ export const LEE_CONFIG: AccelaConfig = {
   permitTypeValue: 'Permitting/Residential/New Primary Structure/NA',
 };
 
-// Charlotte County FL hosts their own Accela instance.
-// TODO: verify module name and permitTypeValue by opening:
-// https://secureapps.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building
-// Look at the "Permit Type" dropdown options and find the one for new single family residential.
+// Charlotte County FL: https://www.charlottecountyfl.gov/citizenaccess
+// TODO: verify permitTypeValue by opening the URL below and inspecting the "Permit Type" dropdown:
+// https://www.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building
 export const CHARLOTTE_CONFIG: AccelaConfig = {
   county: 'charlotte',
-  searchUrl: 'https://secureapps.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building',
+  searchUrl: 'https://www.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building',
   permitTypeValue: 'Building/Residential/New Single Family Residential/NA',
 };
 
