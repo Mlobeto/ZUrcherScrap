@@ -15,3 +15,5 @@ services:
         sync: false
       - key: SCRAPE_LOOKBACK_DAYS
         value: "30"
+      - key: SCRAPE_COUNTIES
+        value: "charlotte"

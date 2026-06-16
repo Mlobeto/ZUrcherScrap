@@ -41,8 +41,15 @@ async function scrapeCounty(config: AccelaConfig, lookbackDays: number) {
 async function main() {
   const lookbackDays = Number(process.argv[2]) || Number(process.env.SCRAPE_LOOKBACK_DAYS) || 30;
 
-  // Scrape all configured counties sequentially
-  const counties = [LEE_CONFIG, CHARLOTTE_CONFIG];
+  // SCRAPE_COUNTIES env var controls which counties to scrape (comma-separated)
+  // e.g. SCRAPE_COUNTIES=lee,charlotte  or  SCRAPE_COUNTIES=charlotte
+  // Default: all counties
+  const allowed = process.env.SCRAPE_COUNTIES
+    ? process.env.SCRAPE_COUNTIES.split(',').map((s) => s.trim().toLowerCase())
+    : null;
+
+  const all = [LEE_CONFIG, CHARLOTTE_CONFIG];
+  const counties = allowed ? all.filter((c) => allowed.includes(c.county)) : all;
   let total = 0;
 
   for (const config of counties) {

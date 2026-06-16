@@ -25,7 +25,8 @@ export const LEE_CONFIG: AccelaConfig = {
 };
 
 // Charlotte County FL: https://www.charlottecountyfl.gov/citizenaccess
-// TODO: verify permitTypeValue by opening the URL below and inspecting the "Permit Type" dropdown:
+// Portal is geo-blocked outside USA — scrape runs from Render (Oregon, US).
+// To verify permitTypeValue: open the URL below from a US IP or VPN and check the "Permit Type" dropdown:
 // https://www.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building
 export const CHARLOTTE_CONFIG: AccelaConfig = {
   county: 'charlotte',
