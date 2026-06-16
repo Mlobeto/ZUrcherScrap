@@ -1,5 +1,12 @@
 import { useCallback, useEffect, useState } from 'react';
-import { getBuilders, getOpportunities, triggerScrape, type Builder, type Opportunity } from './api/client';
+import {
+  downloadMissingBuildersExcel,
+  getBuilders,
+  getOpportunities,
+  triggerScrape,
+  type Builder,
+  type Opportunity,
+} from './api/client';
 import { serviceZoneLabel } from './lib/labels';
 
 type Tab = 'opportunities' | 'builders';
@@ -59,6 +66,16 @@ export default function App() {
       setScraping(false);
     }
   }
+
+  async function handleExportMissing() {
+    try {
+      await downloadMissingBuildersExcel();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Error al exportar');
+    }
+  }
+
+  const missingContactCount = builders.filter((b) => !b.phone?.trim() || !b.email?.trim()).length;
 
   return (
     <div className="min-h-screen">
@@ -179,7 +196,11 @@ export default function App() {
         ) : tab === 'opportunities' ? (
           <OpportunitiesTable data={opportunities} />
         ) : (
-          <BuildersTable data={builders} />
+          <BuildersTable
+            data={builders}
+            missingCount={missingContactCount}
+            onExportMissing={handleExportMissing}
+          />
         )}
       </main>
     </div>
@@ -197,6 +218,49 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
       {children}
     </button>
   );
+}
+
+function downloadOpportunityCSV(opp: Opportunity) {
+  const builderName = opp.builder?.name ?? opp.permit.builderName ?? '';
+  const p = opp.permit;
+
+  const escape = (v: string | number | null | undefined) => {
+    if (v === null || v === undefined) return '';
+    const s = String(v);
+    return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+  };
+  const row = (cells: (string | number | null | undefined)[]) => cells.map(escape).join(',');
+
+  const lines = [
+    row(['Campo', 'Valor']),
+    row(['Permiso N°', p.permitNumber]),
+    row(['Tipo de permiso', p.permitType]),
+    row(['Estado', p.recordStatus]),
+    row(['Ciudad', p.city]),
+    row(['Dirección obra', p.address]),
+    row(['Zona de servicio', serviceZoneLabel(p.serviceZone)]),
+    row(['Requiere séptico', p.requiresSeptic ? 'Sí' : 'No']),
+    row(['Valor estimado', p.estimatedValue ?? '']),
+    row(['Fecha permiso', p.permitDate ? p.permitDate.slice(0, 10) : '']),
+    row(['County', p.county]),
+    row(['URL fuente', p.sourceUrl]),
+    row(['']),
+    row(['Constructora', builderName]),
+    row(['Teléfono', opp.builder?.phone ?? '']),
+    row(['Email', opp.builder?.email ?? '']),
+    row(['']),
+    row(['Score oportunidad', opp.score]),
+    row(['Estado oportunidad', opp.status]),
+  ];
+
+  const csv = `\uFEFF${lines.join('\r\n')}`;
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = `permiso-${p.permitNumber.replace(/[^a-zA-Z0-9-]/g, '_')}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
 }
 
 function OpportunitiesTable({ data }: { data: Opportunity[] }) {
@@ -254,14 +318,25 @@ function OpportunitiesTable({ data }: { data: Opportunity[] }) {
               </td>
               <td className="px-4 py-3 text-xs">{opp.permit.recordStatus ?? '—'}</td>
               <td className="px-4 py-3">
-                <a
-                  href={opp.permit.sourceUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-blue-600 hover:underline"
-                >
-                  Ver registro
-                </a>
+                <div className="flex items-center gap-2">
+                  <a
+                    href={opp.permit.sourceUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="text-blue-600 hover:underline"
+                  >
+                    Ver registro
+                  </a>
+                  <button
+                    onClick={() => downloadOpportunityCSV(opp)}
+                    title="Descargar datos del permiso y constructora"
+                    className="rounded p-1 text-slate-400 hover:bg-slate-100 hover:text-slate-700"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zm3.293-7.707a1 1 0 011.414 0L9 10.586V3a1 1 0 112 0v7.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 010-1.414z" clipRule="evenodd" />
+                    </svg>
+                  </button>
+                </div>
               </td>
             </tr>
           ))}
@@ -271,7 +346,15 @@ function OpportunitiesTable({ data }: { data: Opportunity[] }) {
   );
 }
 
-function BuildersTable({ data }: { data: Builder[] }) {
+function BuildersTable({
+  data,
+  missingCount,
+  onExportMissing,
+}: {
+  data: Builder[];
+  missingCount: number;
+  onExportMissing: () => void;
+}) {
   if (data.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-300 bg-white p-12 text-center text-slate-500">
@@ -281,7 +364,21 @@ function BuildersTable({ data }: { data: Builder[] }) {
   }
 
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
+    <div>
+      <div className="mb-3 flex items-center justify-between rounded-xl border border-slate-200 bg-white px-4 py-3">
+        <p className="text-sm text-slate-600">
+          <span className="font-medium text-slate-900">{missingCount}</span> constructoras sin teléfono o email
+          completo
+        </p>
+        <button
+          onClick={onExportMissing}
+          disabled={missingCount === 0}
+          className="rounded-lg border border-slate-300 px-4 py-1.5 text-sm font-medium hover:bg-slate-50 disabled:opacity-50"
+        >
+          Exportar a Excel
+        </button>
+      </div>
+      <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white">
       <table className="w-full text-left text-sm">
         <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
           <tr>
@@ -306,6 +403,7 @@ function BuildersTable({ data }: { data: Builder[] }) {
           ))}
         </tbody>
       </table>
+      </div>
     </div>
   );
 }

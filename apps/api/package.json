@@ -5,11 +5,12 @@
   "scripts": {
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
-    "build": "tsc"
+    "build": "prisma generate --schema=../../prisma/schema.prisma && tsc"
   },
   "dependencies": {
     "cors": "^2.8.5",
     "dotenv": "^16.5.0",
+    "exceljs": "^4.4.0",
     "express": "^5.1.0"
   },
   "devDependencies": {

@@ -6,6 +6,7 @@ import {
   parseLocationFromText,
   type ServiceZone,
 } from '../lib/service-area.js';
+import { parsePermitHtml } from '../lib/parse-permit-html.js';
 
 const BASE_URL = 'https://aca-prod.accela.com';
 const SEARCH_URL = `${BASE_URL}/LEECO/Cap/CapHome.aspx?module=Permitting`;
@@ -85,57 +86,8 @@ async function fetchPermitDetail(page: Page, item: PermitListItem): Promise<Perm
   await page.goto(item.detailUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForTimeout(2000);
 
-  const parsed = await page.evaluate(() => {
-    const text = document.body.innerText;
-    const pick = (pattern: RegExp) => {
-      const match = text.match(pattern);
-      return match?.[1]?.trim() ?? null;
-    };
-
-    const businessNames = [...document.querySelectorAll('.contactinfo_businessname')]
-      .map((el) => el.textContent?.trim())
-      .filter(Boolean) as string[];
-
-    const phones = [...new Set(
-      [...document.querySelectorAll('.ACA_PhoneNumberLTR')]
-        .map((el) => el.textContent?.trim())
-        .filter(Boolean) as string[]
-    )];
-
-    const emails = [...new Set(
-      [...document.querySelectorAll('.contactinfo_email a, .contactinfo_email')]
-        .map((el) => el.textContent?.replace(/^E-mail:\s*/i, '').trim())
-        .filter((e) => e && e.includes('@')) as string[]
-    )];
-
-    const workLocationEl = document.querySelector('.fontbold');
-    const workLocation = workLocationEl?.textContent?.trim() ?? null;
-
-    const licensedBlock = text.match(/Licensed Professional:[\s\S]*?(?=Project Description:|$)/i)?.[0] ?? '';
-    const contractorLine = licensedBlock
-      .split('\n')
-      .map((l) => l.trim())
-      .filter((l) => l && !/Licensed Professional|Primary Phone|Certified|Contractor/i.test(l))[0] ?? null;
-
-    const ownerSection = text.match(/Owner[\s\S]{0,300}/i)?.[0] ?? null;
-    const conditionsBlock = text.match(/Conditions[\s\S]*?(?=Work Location|Licensed Professional|$)/i)?.[0] ?? '';
-
-    return {
-      recordStatus: pick(/Record Status:\s*([^\n]+)/i),
-      permitType: text.includes('Residential New Primary Structure') ? 'Residential New Primary Structure' : 'Unknown',
-      workLocation,
-      builderName: businessNames[0] ?? contractorLine,
-      contractorName: contractorLine,
-      ownerName: ownerSection,
-      phones,
-      emails,
-      estConstValue: pick(/Est\.\s*Const\.\s*Value:\s*([^\n]+)/i),
-      typeOfUse: pick(/Type of Use:\s*([^\n]+)/i),
-      projectDescription: pick(/Project Description:\s*\n?([\s\S]{0,300})/i),
-      fullPageText: text,
-      conditionsBlock,
-    };
-  });
+  const html = await page.content();
+  const parsed = parsePermitHtml(html);
 
   const requiresSeptic = detectRequiresSeptic(`${parsed.conditionsBlock} ${parsed.fullPageText}`);
 
