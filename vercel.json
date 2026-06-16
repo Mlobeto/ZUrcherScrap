@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm install && npm run build -w @scrapzurcher/web",
+  "buildCommand": "npm run build -w @scrapzurcher/web",
   "outputDirectory": "apps/web/dist",
-  "installCommand": "npm install",
+  "installCommand": "npm install --include=dev",
   "framework": "vite"
 }
