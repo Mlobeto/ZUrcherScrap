@@ -1,6 +1,0 @@
-{
-  "buildCommand": "node_modules/.bin/vite build --root apps/web",
-  "outputDirectory": "apps/web/dist",
-  "installCommand": "npm install --include=dev",
-  "framework": null
-}
