@@ -4,7 +4,7 @@ services:
     runtime: node
     region: oregon
     plan: free
-    buildCommand: npm install && npm run build -w @scrapzurcher/api
+    buildCommand: npm install --include=dev && npx playwright install chromium --with-deps && npm run build -w @scrapzurcher/api
     startCommand: node apps/api/dist/index.js
     envVars:
       - key: NODE_ENV
