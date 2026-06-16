@@ -55,11 +55,16 @@ async function searchPermits(page: Page, lookbackDays: number): Promise<PermitLi
   await page.fill('#ctl00_PlaceHolderMain_generalSearchForm_txtGSEndDate', formatDate(end));
 
   await Promise.all([
-    page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}),
+    page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {}),
     page.click('#ctl00_PlaceHolderMain_btnNewSearch'),
   ]);
 
-  await page.waitForTimeout(2000);
+  // Wait for either results or "no records" message
+  await Promise.race([
+    page.waitForSelector('a[href*="CapDetail.aspx"]', { timeout: 20000 }).catch(() => {}),
+    page.waitForSelector('.ACA_SmLabel', { timeout: 20000 }).catch(() => {}),
+  ]);
+  await page.waitForTimeout(1500);
 
   const links = await page.locator('a[href*="CapDetail.aspx"]').evaluateAll((els) => {
     const seen = new Set<string>();
