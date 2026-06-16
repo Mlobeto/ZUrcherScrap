@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   downloadMissingBuildersExcel,
   getBuilders,
@@ -17,7 +17,9 @@ export default function App() {
   const [builders, setBuilders] = useState<Builder[]>([]);
   const [loading, setLoading] = useState(true);
   const [scraping, setScraping] = useState(false);
+  const [scrapeRunning, setScrapeRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const [county, setCounty] = useState('lee');
   const [minScore, setMinScore] = useState('0');
@@ -44,6 +46,13 @@ export default function App() {
       ]);
       setOpportunities(oppRes.data);
       setBuilders(builderRes.data);
+
+      // Stop polling once we have data after a scrape
+      if (oppRes.data.length > 0 && pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+        setScrapeRunning(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Error loading data');
     } finally {
@@ -55,11 +64,27 @@ export default function App() {
     loadData();
   }, [loadData]);
 
+  // Stop polling when component unmounts
+  useEffect(() => {
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+    };
+  }, []);
+
   async function handleScrape() {
     setScraping(true);
+    setError(null);
     try {
-      await triggerScrape(30);
-      setTimeout(loadData, 5000);
+      const res = await triggerScrape(30);
+      if (res.status === 409) {
+        // Already running — just start polling
+      } else if (!res.ok) {
+        throw new Error(`Error al iniciar scrape (${res.status})`);
+      }
+      setScrapeRunning(true);
+      // Poll every 15 seconds until data appears
+      if (pollRef.current) clearInterval(pollRef.current);
+      pollRef.current = setInterval(loadData, 15_000);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Scrape failed');
     } finally {
@@ -87,10 +112,10 @@ export default function App() {
           </div>
           <button
             onClick={handleScrape}
-            disabled={scraping}
+            disabled={scraping || scrapeRunning}
             className="rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white hover:bg-blue-700 disabled:opacity-50"
           >
-            {scraping ? 'Scrapeando...' : 'Ejecutar scrape'}
+            {scraping ? 'Iniciando...' : scrapeRunning ? 'Buscando permisos...' : 'Ejecutar scrape'}
           </button>
         </div>
       </header>
@@ -184,6 +209,18 @@ export default function App() {
             Constructoras ({builders.length})
           </TabButton>
         </div>
+
+        {scrapeRunning && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-700">
+            <svg className="h-4 w-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+              <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+            </svg>
+            <span>
+              <span className="font-medium">Scrape en progreso</span> — buscando permisos en Lee County. Puede tardar varios minutos. La página se actualizará automáticamente cuando haya resultados.
+            </span>
+          </div>
+        )}
 
         {error && (
           <div className="mb-4 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
