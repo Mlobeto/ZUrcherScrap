@@ -8,32 +8,29 @@ import {
 } from '../lib/service-area.js';
 import { parsePermitHtml } from '../lib/parse-permit-html.js';
 
-const BASE_ACCELA = 'https://aca-prod.accela.com';
 
 export interface AccelaConfig {
   /** County name stored in DB, e.g. 'lee' | 'charlotte' */
   county: string;
-  /** Accela agency code, e.g. 'LEECO' | 'CHARLOTTE' */
-  agencyCode: string;
-  /** Accela module name, e.g. 'Permitting' | 'Building' */
-  module: string;
+  /** Full URL to the permit search page (CapHome.aspx with module param) */
+  searchUrl: string;
   /** Value of the permit type <select> option for new residential construction */
   permitTypeValue: string;
 }
 
 export const LEE_CONFIG: AccelaConfig = {
   county: 'lee',
-  agencyCode: 'LEECO',
-  module: 'Permitting',
+  searchUrl: 'https://aca-prod.accela.com/LEECO/Cap/CapHome.aspx?module=Permitting',
   permitTypeValue: 'Permitting/Residential/New Primary Structure/NA',
 };
 
+// Charlotte County FL hosts their own Accela instance.
+// TODO: verify module name and permitTypeValue by opening:
+// https://secureapps.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building
+// Look at the "Permit Type" dropdown options and find the one for new single family residential.
 export const CHARLOTTE_CONFIG: AccelaConfig = {
   county: 'charlotte',
-  agencyCode: 'CHARLOTTE',
-  module: 'Building',
-  // Verify this value by opening the Charlotte Accela portal and inspecting the select options:
-  // https://aca-prod.accela.com/CHARLOTTE/Cap/CapHome.aspx?module=Building
+  searchUrl: 'https://secureapps.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building',
   permitTypeValue: 'Building/Residential/New Single Family Residential/NA',
 };
 
@@ -68,8 +65,7 @@ function formatDate(d: Date): string {
 }
 
 async function searchPermits(page: Page, config: AccelaConfig, lookbackDays: number): Promise<PermitListItem[]> {
-  const searchUrl = `${BASE_ACCELA}/${config.agencyCode}/Cap/CapHome.aspx?module=${config.module}`;
-  await page.goto(searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.goto(config.searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
   await page.waitForSelector('#ctl00_PlaceHolderMain_generalSearchForm_ddlGSPermitType', { timeout: 30000 });
 
   const end = new Date();
@@ -92,10 +88,10 @@ async function searchPermits(page: Page, config: AccelaConfig, lookbackDays: num
   await page.waitForTimeout(1500);
 
   const currentUrl = page.url();
-  if (currentUrl.includes('Error.aspx')) {
+  if (currentUrl.includes('Error.aspx') || currentUrl.includes('error.aspx')) {
     throw new Error(
-      `Accela returned an error page (${currentUrl}). ` +
-      'The server IP may be blocked by Accela. Run the scrape from a local/residential IP.'
+      `Accela returned an error page for ${config.county} (${currentUrl}). ` +
+      'Check that searchUrl and permitTypeValue are correct, or the server IP may be blocked.'
     );
   }
 
