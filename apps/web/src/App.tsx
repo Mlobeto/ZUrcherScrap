@@ -21,7 +21,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const [county, setCounty] = useState('lee');
+  const [county, setCounty] = useState('');
   const [minScore, setMinScore] = useState('0');
   const [serviceZone, setServiceZone] = useState('');
   const [requiresSeptic, setRequiresSeptic] = useState('');
@@ -33,7 +33,8 @@ export default function App() {
     setLoading(true);
     setError(null);
     try {
-      const params: Record<string, string> = { county, minScore, limit: '100' };
+      const params: Record<string, string> = { minScore, limit: '100' };
+      if (county) params.county = county;
       if (fromDate) params.from = fromDate;
       if (toDate) params.to = toDate;
       if (serviceZone) params.serviceZone = serviceZone;
@@ -125,7 +126,9 @@ export default function App() {
               onChange={(e) => setCounty(e.target.value)}
               className="rounded border border-slate-300 px-3 py-1.5 text-sm"
             >
+              <option value="">Todos</option>
               <option value="lee">Lee</option>
+              <option value="charlotte">Charlotte</option>
             </select>
           </div>
           <div>

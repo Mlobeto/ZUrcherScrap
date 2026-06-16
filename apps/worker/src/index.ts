@@ -4,53 +4,53 @@ import { fileURLToPath } from 'node:url';
 
 dotenv.config({ path: path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../../.env') });
 import { PrismaClient } from '@prisma/client';
-import { scrapeLeeAccelaPermits } from './adapters/lee-accela.js';
+import { scrapeAccelaPermits, LEE_CONFIG, CHARLOTTE_CONFIG, type AccelaConfig } from './adapters/accela.js';
 import { ingestPermits } from './pipeline/ingest.js';
 
 const prisma = new PrismaClient();
 
-async function main() {
-  const lookbackDays = Number(process.argv[2]) || Number(process.env.SCRAPE_LOOKBACK_DAYS) || 30;
-
-  console.log(`Starting Lee County Accela scrape (last ${lookbackDays} days)...`);
+async function scrapeCounty(config: AccelaConfig, lookbackDays: number) {
+  console.log(`\nStarting ${config.county.toUpperCase()} County Accela scrape (last ${lookbackDays} days)...`);
 
   const scrapeRun = await prisma.scrapeRun.create({
-    data: {
-      county: 'lee',
-      sourceType: 'accela_permits',
-      status: 'running',
-    },
+    data: { county: config.county, sourceType: 'accela_permits', status: 'running' },
   });
 
   try {
-    const permits = await scrapeLeeAccelaPermits(lookbackDays);
+    const permits = await scrapeAccelaPermits(config, lookbackDays);
     const ingested = await ingestPermits(prisma, permits, scrapeRun.id);
 
     await prisma.scrapeRun.update({
       where: { id: scrapeRun.id },
-      data: {
-        status: 'completed',
-        finishedAt: new Date(),
-        recordsFound: ingested,
-      },
+      data: { status: 'completed', finishedAt: new Date(), recordsFound: ingested },
     });
 
-    console.log(`Done. Ingested ${ingested} permits.`);
+    console.log(`[${config.county}] Done. Ingested ${ingested} permits.`);
+    return ingested;
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     await prisma.scrapeRun.update({
       where: { id: scrapeRun.id },
-      data: {
-        status: 'failed',
-        finishedAt: new Date(),
-        error: message,
-      },
+      data: { status: 'failed', finishedAt: new Date(), error: message },
     });
-    console.error('Scrape failed:', message);
-    process.exit(1);
-  } finally {
-    await prisma.$disconnect();
+    console.error(`[${config.county}] Scrape failed:`, message);
+    return 0;
   }
+}
+
+async function main() {
+  const lookbackDays = Number(process.argv[2]) || Number(process.env.SCRAPE_LOOKBACK_DAYS) || 30;
+
+  // Scrape all configured counties sequentially
+  const counties = [LEE_CONFIG, CHARLOTTE_CONFIG];
+  let total = 0;
+
+  for (const config of counties) {
+    total += await scrapeCounty(config, lookbackDays);
+  }
+
+  await prisma.$disconnect();
+  console.log(`\nAll done. Total ingested: ${total} permits.`);
 }
 
 main();
