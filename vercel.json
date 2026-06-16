@@ -1,6 +1,6 @@
 {
-  "buildCommand": "npm run build -w @scrapzurcher/web",
+  "buildCommand": "cd apps/web && ./node_modules/.bin/vite build",
   "outputDirectory": "apps/web/dist",
   "installCommand": "npm install --include=dev",
-  "framework": "vite"
+  "framework": null
 }
