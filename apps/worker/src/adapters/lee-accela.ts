@@ -66,14 +66,14 @@ async function searchPermits(page: Page, lookbackDays: number): Promise<PermitLi
   ]);
   await page.waitForTimeout(1500);
 
-  // Debug: log page state after search
-  console.log(`[debug] URL after search: ${page.url()}`);
-  console.log(`[debug] Page title: ${await page.title()}`);
-  const allLinks = await page.locator('a').count();
-  const capLinks = await page.locator('a[href*="CapDetail.aspx"]').count();
-  console.log(`[debug] Total <a> on page: ${allLinks} — CapDetail links: ${capLinks}`);
-  const bodyText = await page.locator('body').innerText().catch(() => '(error reading body)');
-  console.log(`[debug] Body snippet: ${bodyText.slice(0, 500)}`);
+  // Detect if Accela returned an error page (e.g. IP blocked by cloud server)
+  const currentUrl = page.url();
+  if (currentUrl.includes('Error.aspx')) {
+    throw new Error(
+      `Accela returned an error page after search (${currentUrl}). ` +
+      'This usually means the server IP is blocked by Accela. Run the scrape from a local/residential IP.'
+    );
+  }
 
   const links = await page.locator('a[href*="CapDetail.aspx"]').evaluateAll((els) => {
     const seen = new Set<string>();
