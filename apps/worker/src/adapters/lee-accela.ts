@@ -55,11 +55,11 @@ async function searchPermits(page: Page, lookbackDays: number): Promise<PermitLi
   await page.fill('#ctl00_PlaceHolderMain_generalSearchForm_txtGSEndDate', formatDate(end));
 
   await Promise.all([
-    page.waitForLoadState('networkidle', { timeout: 90000 }).catch(() => {}),
+    page.waitForLoadState('networkidle', { timeout: 20000 }).catch(() => {}),
     page.click('#ctl00_PlaceHolderMain_btnNewSearch'),
   ]);
 
-  await page.waitForTimeout(4000);
+  await page.waitForTimeout(2000);
 
   const links = await page.locator('a[href*="CapDetail.aspx"]').evaluateAll((els) => {
     const seen = new Set<string>();
@@ -83,8 +83,8 @@ async function searchPermits(page: Page, lookbackDays: number): Promise<PermitLi
 }
 
 async function fetchPermitDetail(page: Page, item: PermitListItem): Promise<PermitDetail> {
-  await page.goto(item.detailUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
-  await page.waitForTimeout(2000);
+  await page.goto(item.detailUrl, { waitUntil: 'domcontentloaded', timeout: 30000 });
+  await page.waitForTimeout(800);
 
   const html = await page.content();
   const parsed = parsePermitHtml(html);
@@ -146,6 +146,9 @@ async function fetchPermitDetail(page: Page, item: PermitListItem): Promise<Perm
   };
 }
 
+const MAX_PERMITS_PER_RUN = 80;
+const GLOBAL_TIMEOUT_MS = 8 * 60 * 1000; // 8 minutes max
+
 export async function scrapeLeeAccelaPermits(lookbackDays: number): Promise<PermitDetail[]> {
   const browser = await chromium.launch({ headless: true });
   const context = await browser.newContext({
@@ -153,13 +156,19 @@ export async function scrapeLeeAccelaPermits(lookbackDays: number): Promise<Perm
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
   });
   const page = await context.newPage();
+  const startedAt = Date.now();
 
   try {
     const list = await searchPermits(page, lookbackDays);
-    console.log(`Found ${list.length} permits to process`);
+    const limited = list.slice(0, MAX_PERMITS_PER_RUN);
+    console.log(`Found ${list.length} permits — processing up to ${limited.length}`);
 
     const details: PermitDetail[] = [];
-    for (const item of list) {
+    for (const item of limited) {
+      if (Date.now() - startedAt > GLOBAL_TIMEOUT_MS) {
+        console.log(`  ⏱ Global timeout reached after ${details.length} permits — stopping early`);
+        break;
+      }
       try {
         const detail = await fetchPermitDetail(page, item);
         details.push(detail);
