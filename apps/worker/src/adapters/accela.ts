@@ -65,7 +65,20 @@ function formatDate(d: Date): string {
 }
 
 async function searchPermits(page: Page, config: AccelaConfig, lookbackDays: number): Promise<PermitListItem[]> {
-  await page.goto(config.searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
+  await page.goto(config.searchUrl, { waitUntil: 'networkidle', timeout: 60000 });
+
+  // Debug: log page state and available form fields
+  console.log(`[${config.county}][debug] URL: ${page.url()}`);
+  console.log(`[${config.county}][debug] Title: ${await page.title()}`);
+  const selects = await page.locator('select').evaluateAll((els) =>
+    els.map((el) => `${el.id || '(no id)'}  options: ${Array.from(el.options).slice(0, 5).map((o) => o.value).join(' | ')}`)
+  );
+  console.log(`[${config.county}][debug] Selects on page:\n  ${selects.join('\n  ')}`);
+  const inputs = await page.locator('input[type="text"]').evaluateAll((els) =>
+    els.map((el) => el.id || '(no id)')
+  );
+  console.log(`[${config.county}][debug] Text inputs: ${inputs.join(', ')}`);
+
   await page.waitForSelector('#ctl00_PlaceHolderMain_generalSearchForm_ddlGSPermitType', { timeout: 30000 });
 
   const end = new Date();
