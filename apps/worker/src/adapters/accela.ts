@@ -24,14 +24,28 @@ export const LEE_CONFIG: AccelaConfig = {
   permitTypeValue: 'Permitting/Residential/New Primary Structure/NA',
 };
 
-// Charlotte County FL: https://www.charlottecountyfl.gov/citizenaccess
-// Portal is geo-blocked outside USA — scrape runs from Render (Oregon, US).
-// To verify permitTypeValue: open the URL below from a US IP or VPN and check the "Permit Type" dropdown:
-// https://www.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building
+// Charlotte County FL — geo-blocked outside USA + CloudFront blocks cloud IPs.
+// Only works from a residential US IP. Run with: SCRAPE_COUNTIES=charlotte npm run scrape (via VPN)
 export const CHARLOTTE_CONFIG: AccelaConfig = {
   county: 'charlotte',
   searchUrl: 'https://www.charlottecountyfl.gov/CitizenAccess/Cap/CapHome.aspx?module=Building',
   permitTypeValue: 'Building/Residential/New Single Family Residential/NA',
+};
+
+// Sarasota County FL — adjacent to Lee County (north). Uses aca-prod.accela.com.
+// Accessible from Argentina. Building module may require login — uses Permitting module as fallback.
+export const SARASOTA_CONFIG: AccelaConfig = {
+  county: 'sarasota',
+  searchUrl: 'https://aca-prod.accela.com/sarasotaco/Cap/CapHome.aspx?module=Building',
+  permitTypeValue: 'Building/Residential/New Single Family Residential/NA',
+};
+
+// Hillsborough County FL (Tampa area) — ~200km from Lee. Uses aca-prod.accela.com.
+// Accessible from Argentina. Permit type confirmed visible in portal.
+export const HILLSBOROUGH_CONFIG: AccelaConfig = {
+  county: 'hillsborough',
+  searchUrl: 'https://aca-prod.accela.com/hcfl/Cap/CapHome.aspx?module=Building',
+  permitTypeValue: 'Building/Residential/Residential New Construction and Additions/NA',
 };
 
 export interface PermitListItem {

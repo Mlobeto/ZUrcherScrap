@@ -6,9 +6,11 @@ export const SERVICE_COUNTIES = [
   'charlotte',
   'collier',
   'sarasota',
+  'hillsborough',
   'hendry',
   'glades',
   'desoto',
+  'manatee',
 ] as const;
 
 const CORE_CITY_PATTERNS = [/lehigh\s*acres/i, /\blehigh\b/i];

@@ -129,6 +129,8 @@ export default function App() {
               <option value="">Todos</option>
               <option value="lee">Lee</option>
               <option value="charlotte">Charlotte</option>
+              <option value="sarasota">Sarasota</option>
+              <option value="hillsborough">Hillsborough (Tampa)</option>
             </select>
           </div>
           <div>
