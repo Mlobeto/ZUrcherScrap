@@ -32,8 +32,8 @@ export const CHARLOTTE_CONFIG: AccelaConfig = {
   permitTypeValue: 'Building/Residential/New Single Family Residential/NA',
 };
 
-// Sarasota County FL — adjacent to Lee County (north). Uses aca-prod.accela.com.
-// Accessible from Argentina. Building module may require login — uses Permitting module as fallback.
+// Sarasota County FL — Building and Community Development modules require login.
+// Not currently scrapable without credentials.
 export const SARASOTA_CONFIG: AccelaConfig = {
   county: 'sarasota',
   searchUrl: 'https://aca-prod.accela.com/sarasotaco/Cap/CapHome.aspx?module=Building',
@@ -45,7 +45,7 @@ export const SARASOTA_CONFIG: AccelaConfig = {
 export const HILLSBOROUGH_CONFIG: AccelaConfig = {
   county: 'hillsborough',
   searchUrl: 'https://aca-prod.accela.com/hcfl/Cap/CapHome.aspx?module=Building',
-  permitTypeValue: 'Building/Residential/Residential New Construction and Additions/NA',
+  permitTypeValue: 'Building/Residential/New Construction and Additions/NA',
 };
 
 export interface PermitListItem {
@@ -83,10 +83,27 @@ async function searchPermits(page: Page, config: AccelaConfig, lookbackDays: num
 
   // Check for access errors before trying the form
   const pageTitle = await page.title();
+  const pageUrl = page.url();
+
   if (pageTitle.includes('403') || pageTitle.includes('Forbidden') || pageTitle.includes('Error')) {
     throw new Error(
       `Access denied for ${config.county} (page title: "${pageTitle}"). ` +
       'The portal is blocking automated access from this IP. Run from a residential US IP.'
+    );
+  }
+
+  // If redirected to login or error page, bail out early
+  if (pageUrl.includes('/Login') || pageUrl.includes('/Account') || pageUrl.includes('login') ||
+      pageTitle.toLowerCase().includes('login') || pageTitle.toLowerCase().includes('sign in')) {
+    throw new Error(
+      `${config.county} portal requires login (redirected to: ${pageUrl}). ` +
+      'This county requires an authenticated account to search permits.'
+    );
+  }
+  if (pageUrl.includes('Error.aspx') || pageUrl.includes('error.aspx')) {
+    throw new Error(
+      `${config.county} portal returned an error page (${pageUrl}). ` +
+      'The module may require login or the URL/module name may be incorrect.'
     );
   }
 
@@ -127,8 +144,11 @@ async function searchPermits(page: Page, config: AccelaConfig, lookbackDays: num
       const text = el.textContent?.trim() ?? '';
       const href = el.getAttribute('href');
       if (!href || seen.has(text)) continue;
-      // Accept permit numbers like RES2026-XXXXX, BLD2026-XXXXX, etc.
-      if (!/^[A-Z]{2,4}\d{4}-\d+/i.test(text)) continue;
+      // Accept various county permit number formats:
+      // Lee:          BLD2026-00123  (letters + 4-digit year + dash + digits)
+      // Hillsborough: HC-BLD-26-0085308  (groups of letters/digits separated by dashes)
+      const isPermitNumber = /^[A-Z0-9][A-Z0-9-]{4,}$/i.test(text) && /\d{3,}/.test(text);
+      if (!isPermitNumber) continue;
       seen.add(text);
       results.push({
         permitNumber: text,
