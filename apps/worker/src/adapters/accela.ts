@@ -65,19 +65,16 @@ function formatDate(d: Date): string {
 }
 
 async function searchPermits(page: Page, config: AccelaConfig, lookbackDays: number): Promise<PermitListItem[]> {
-  await page.goto(config.searchUrl, { waitUntil: 'networkidle', timeout: 60000 });
+  await page.goto(config.searchUrl, { waitUntil: 'domcontentloaded', timeout: 60000 });
 
-  // Debug: log page state and available form fields
-  console.log(`[${config.county}][debug] URL: ${page.url()}`);
-  console.log(`[${config.county}][debug] Title: ${await page.title()}`);
-  const selects = await page.locator('select').evaluateAll((els) =>
-    els.map((el) => `${el.id || '(no id)'}  options: ${Array.from(el.options).slice(0, 5).map((o) => o.value).join(' | ')}`)
-  );
-  console.log(`[${config.county}][debug] Selects on page:\n  ${selects.join('\n  ')}`);
-  const inputs = await page.locator('input[type="text"]').evaluateAll((els) =>
-    els.map((el) => el.id || '(no id)')
-  );
-  console.log(`[${config.county}][debug] Text inputs: ${inputs.join(', ')}`);
+  // Check for access errors before trying the form
+  const pageTitle = await page.title();
+  if (pageTitle.includes('403') || pageTitle.includes('Forbidden') || pageTitle.includes('Error')) {
+    throw new Error(
+      `Access denied for ${config.county} (page title: "${pageTitle}"). ` +
+      'The portal is blocking automated access from this IP. Run from a residential US IP.'
+    );
+  }
 
   await page.waitForSelector('#ctl00_PlaceHolderMain_generalSearchForm_ddlGSPermitType', { timeout: 30000 });
 
